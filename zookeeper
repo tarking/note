@@ -1,6 +1,6 @@
 单机模式
 
-单机安装非常简单，只要获取到 Zookeeper 的压缩包并解压到某个目录如：C:\zookeeper-3.4.5\下，Zookeeper的启动脚本在bin目录下，Windows下的启动脚本是zkServer.cmd。
+单机安装非常简单，只要获取到Zookeeper的压缩包并解压到某个目录如：C:\zookeeper-3.4.5\下，Zookeeper的启动脚本在bin目录下，Windows下的启动脚本是zkServer.cmd。
 
 在你执行启动脚本之前，还有几个基本的配置项需要配置一下，Zookeeper的配置文件在conf目录下，这个目录下有zoo_sample.cfg和log4j.properties，你需要做的就是将zoo_sample.cfg 改名为zoo.cfg，因为Zookeeper在启动时会找这个文件作为默认配置文件。
 下面详细介绍一下，这个配置文件中各个配置项的意义。
@@ -32,10 +32,173 @@ clientPort=2181
 # Set to "0" to disable auto purge feature
 #autopurge.purgeInterval=1
 
-解释：
+说明：
 tickTime：这个时间是作为Zookeeper服务器之间或客户端与服务器之间维持心跳的时间间隔，也就是每个tickTime时间就会发送一个心跳。
 dataDir：顾名思义就是Zookeeper保存数据的目录，默认情况下，Zookeeper将写数据的日志文件也保存在这个目录里。
 dataLogDir：顾名思义就是Zookeeper保存日志文件的目录
 clientPort：这个端口就是客户端连接Zookeeper服务器的端口，Zookeeper会监听这个端口，接受客户端的访问请求。
 当这些配置项配置好后，你现在就可以启动Zookeeper了，启动后要检查Zookeeper是否已经在服务，可以通过 netstat – ano 命令查看是否有你配置的clientPort端口号在监听服务。
 
+集群模式
+
+Zookeeper不仅可以单机提供服务，同时也支持多机组成集群来提供服务。实际上Zookeeper还支持另外一种伪集群的方式，也就是可以在一台物理机上运行多个Zookeeper实例，下面将介绍集群模式的安装和配置。
+Zookeeper的集群模式的安装和配置也不是很复杂，所要做的就是增加几个配置项。集群模式除了上面的三个配置项还要增加下面几个配置项：
+
+initLimit=5  
+syncLimit=2  
+server.1=192.168.211.1:2888:3888  
+server.2=192.168.211.2:2888:3888
+
+initLimit：这个配置项是用来配置Zookeeper接受客户端（这里所说的客户端不是用户连接Zookeeper服务器的客户端，而是Zookeeper服务器集群中连接到Leader的Follower服务器）初始化连接时最长能忍受多少个心跳时间间隔数。当已经超过5个心跳的时间（也就是tickTime）长度后Zookeeper服务器还没有收到客户端的返回信息，那么表明这个客户端连接失败。总的时间长度就是5*2000=10秒。
+syncLimit：这个配置项标识Leader与Follower之间发送消息，请求和应答时间长度，最长不能超过多少个tickTime的时间长度，总的时间长度就是2*2000=4秒。
+server.A=B：C：D：其中 A 是一个数字，表示这个是第几号服务器；B 是这个服务器的 ip 地址；C 表示的是这个服务器与集群中的 Leader 服务器交换信息的端口；D 表示的是万一集群中的 Leader 服务器挂了，需要一个端口来重新进行选举，选出一个新的 Leader，而这个端口就是用来执行选举时服务器相互通信的端口。如果是伪集群的配置方式，由于 B 都是一样，所以不同的 Zookeeper 实例通信端口号不能一样，所以要给它们分配不同的端口号。
+除了修改 zoo.cfg 配置文件，集群模式下还要配置一个文件 myid，这个文件在 dataDir 目录下，这个文件里面就有一个数据就是 A 的值，Zookeeper 启动时会读取这个文件，拿到里面的数据与 zoo.cfg 里面的配置信息比较从而判断到底是那个 server。
+
+数据模型
+
+Zookeeper 会维护一个具有层次关系的数据结构，它非常类似于一个标准的文件系统，如图 1 所示：
+
+
+zookeeper
+Zookeeper 这种数据结构有如下这些特点：
+
+每个子目录项如 NameService 都被称作为 znode，这个 znode 是被它所在的路径唯一标识，如 Server1 这个 znode 的标识为 /NameService/Server1
+znode 可以有子节点目录，并且每个 znode 可以存储数据，注意 EPHEMERAL 类型的目录节点不能有子节点目录
+znode 是有版本的，每个 znode 中存储的数据可以有多个版本，也就是一个访问路径中可以存储多份数据
+znode 可以是临时节点，一旦创建这个 znode 的客户端与服务器失去联系，这个 znode 也将自动删除，Zookeeper 的客户端和服务器通信采用长连接方式，每个客户端和服务器通过心跳来保持连接，这个连接状态称为 session，如果 znode 是临时节点，这个 session 失效，znode 也就删除了
+znode 的目录名可以自动编号，如 App1 已经存在，再创建的话，将会自动命名为 App2
+znode 可以被监控，包括这个目录节点中存储的数据的修改，子节点目录的变化等，一旦变化可以通知设置监控的客户端，这个是 Zookeeper 的核心特性，Zookeeper 的很多功能都是基于这个特性实现的，后面在典型的应用场景中会有实例介绍
+如何使用
+
+Zookeeper 作为一个分布式的服务框架，主要用来解决分布式集群中应用系统的一致性问题，它能提供基于类似于文件系统的目录节点树方式的数据存储，但是 Zookeeper 并不是用来专门存储数据的，它的作用主要是用来维护和监控你存储的数据的状态变化。通过监控这些数据状态的变化，从而可以达到基于数据的集群管理.
+
+通过C#代码使用zookeeper
+
+Zookeeper的使用主要是通过创建其Nuget ZooKeeperNet包下的Zookeeper实例，并且调用其接口方法进行的，主要的操作就是对znode的增删改操作，监听znode的变化以及处理。
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using ZooKeeperNet;
+
+namespace ZookeeperDemo
+{
+    class Watcher : IWatcher
+    {
+        public void Process(WatchedEvent @event)
+        {
+            if (@event.Type == EventType.NodeDataChanged)
+            {
+                Console.WriteLine(@event.Path);
+            }
+        }
+    }
+}
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using ZooKeeperNet;
+
+namespace ZookeeperDemo
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+
+            //创建一个Zookeeper实例，第一个参数为目标服务器地址和端口，第二个参数为Session超时时间，第三个为节点变化时的回调方法 
+            using (ZooKeeper zk = new ZooKeeper("127.0.0.1:2181", new TimeSpan(0, 0, 0, 50000), new Watcher()))
+            {
+                var stat = zk.Exists("/root",true);
+                 
+                ////创建一个节点root，数据是mydata,不进行ACL权限控制，节点为永久性的(即客户端shutdown了也不会消失) 
+                //zk.Create("/root", "mydata".GetBytes(), Ids.OPEN_ACL_UNSAFE, CreateMode.Persistent);
+
+                //在root下面创建一个childone znode,数据为childone,不进行ACL权限控制，节点为永久性的 
+                zk.Create("/root/childone", "childone".GetBytes(), Ids.OPEN_ACL_UNSAFE, CreateMode.Persistent);
+                //取得/root节点下的子节点名称,返回List<String> 
+                zk.GetChildren("/root", true);
+                //取得/root/childone节点下的数据,返回byte[] 
+                zk.GetData("/root/childone", true, null);
+
+                //修改节点/root/childone下的数据，第三个参数为版本，如果是-1，那会无视被修改的数据版本，直接改掉
+                zk.SetData("/root/childone", "childonemodify".GetBytes(), -1);
+                //删除/root/childone这个节点，第二个参数为版本，－1的话直接删除，无视版本 
+                zk.Delete("/root/childone", -1);
+            }
+
+        }
+    }
+}
+ 
+
+浅析
+
+创建连接：
+
+1.获取服务主机列表
+
+2.设置超时时间
+
+3.注册客户端事件
+
+4.以线程安全的方式创建请求连接（启动客户端请求队列，循环队列基于socket通信、根据请求类型执行不同的请求动作）
+
+请求流程：
+
+构造请求头、构造request,reponse、构造响应头、构造Packet对象,packet对象准备好后，把整个对象放入一个outgoingQueue 
+packet被放入outgoingQueue中，等待SendThread把packet对应的内容发送给server。server处理分3步在doio方法中ReadLength ReadConnectResult ReadResponse，直到ReadResponse方法中确定packet请求结束。
+
+响应流程：
+
+针对心跳的ping请求的resp，针对auth请求的resp，一般接口请求的resp，如果接口请求要求了watcher，当watcher关注的内容有变化时的notification
+
+锁相关部分API方法：
+
+创建节点：create
+
+demo：zk.Create(Dir, severname.GetBytes(), Ids.OPEN_ACL_UNSAFE, CreateMode.Persistent);
+
+其中CreateMode分为4类Persistent、PersistentSequential、Ephemeral、EphemeralSequential
+
+PERSISTENT 创建持久化节点，对应机器关闭连接后节点/数据不会消失
+
+PERSISTENT_SEQUENTIAL 如果PATH是以’/’结尾则以这个PATH作为父节点，创建一个子节点，其子节点名字是一个按先后顺序排列的数值；否则创建一个名字是‘/’后面字符加上先后顺序排列的数值字符串的节点，同样创建持久节点
+
+EPHEMERAL 创建瞬时节点，Zookeeper在感知连接机器宕机后会清除它创建的瞬时节点
+
+EPHEMERAL_SEQUENTIAL 穿件瞬时顺序节点，和PERSISTENT_SEQUENTIAL一样，区别在于它是瞬时的
+
+删除节点 delete
+
+demo ：zk.Delete(Dir, -1);
+
+前一个参数代表节点名称（一般用作路径），后一个是版本号 -1表示全匹配
+
+查看节点 exists
+
+demo ： zk.Exists(Dir, new MyWatch2());
+
+获取数据 getData
+
+demo ：zk.GetData(Dir, new MyWatch2(), stat);
+
+获取一个节点的数据，可注入watcher 
+
+设置数据 setData
+
+demo ： zk.SetData(Dir, new byte[1], 1);
+
+获取下级节点集合 GetChildren
+
+demo ：zk.GetChildren(Dir, true);
+
+存储
+
+znodes类似文件和目录。但它不是一个典型的文件系统，zookeeper数据保存在内存中，这意味着zookeeper可以实现高吞吐量和低延迟。
+
+watcher
+
+Zookeeper有两种watches，一种是data watches，另一种是child watches。其中，getData()和exists()以及create()等会添加data watches，getChildren()会添加child watches。而delete()涉及到删除数据和子节点，会同时触发data watches和child watches。
