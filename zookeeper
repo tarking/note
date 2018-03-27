@@ -1,0 +1,41 @@
+单机模式
+
+单机安装非常简单，只要获取到 Zookeeper 的压缩包并解压到某个目录如：C:\zookeeper-3.4.5\下，Zookeeper的启动脚本在bin目录下，Windows下的启动脚本是zkServer.cmd。
+
+在你执行启动脚本之前，还有几个基本的配置项需要配置一下，Zookeeper的配置文件在conf目录下，这个目录下有zoo_sample.cfg和log4j.properties，你需要做的就是将zoo_sample.cfg 改名为zoo.cfg，因为Zookeeper在启动时会找这个文件作为默认配置文件。
+下面详细介绍一下，这个配置文件中各个配置项的意义。
+
+# The number of milliseconds of each tick
+tickTime=2000     #维持心跳的时间间隔，单位毫秒（ms）
+# The number of ticks that the initial 
+# synchronization phase can take
+initLimit=10      
+# The number of ticks that can pass between 
+# sending a request and getting an acknowledgement
+syncLimit=5
+# the directory where the snapshot is stored.
+# do not use /tmp for storage, /tmp here is just 
+# example sakes.
+dataDir=C:\\zookeeper-3.4.5\\data
+dataLogDir=C:\\zookeeper-3.4.5\\log
+# the port at which the clients will connect
+clientPort=2181
+#
+# Be sure to read the maintenance section of the 
+# administrator guide before turning on autopurge.
+#
+# http://zookeeper.apache.org/doc/current/zookeeperAdmin.html#sc_maintenance
+#
+# The number of snapshots to retain in dataDir
+#autopurge.snapRetainCount=3
+# Purge task interval in hours
+# Set to "0" to disable auto purge feature
+#autopurge.purgeInterval=1
+
+解释：
+tickTime：这个时间是作为Zookeeper服务器之间或客户端与服务器之间维持心跳的时间间隔，也就是每个tickTime时间就会发送一个心跳。
+dataDir：顾名思义就是Zookeeper保存数据的目录，默认情况下，Zookeeper将写数据的日志文件也保存在这个目录里。
+dataLogDir：顾名思义就是Zookeeper保存日志文件的目录
+clientPort：这个端口就是客户端连接Zookeeper服务器的端口，Zookeeper会监听这个端口，接受客户端的访问请求。
+当这些配置项配置好后，你现在就可以启动Zookeeper了，启动后要检查Zookeeper是否已经在服务，可以通过 netstat – ano 命令查看是否有你配置的clientPort端口号在监听服务。
+
